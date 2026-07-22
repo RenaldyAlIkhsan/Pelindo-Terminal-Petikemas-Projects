@@ -1,0 +1,576 @@
+// =====================================================================================
+//  CATATAN PENTING: INDEX KOLOM SUDAH DISESUAIKAN DENGAN SPREADSHEET
+// =====================================================================================
+//
+// Berdasarkan screenshot spreadsheet yang diberikan:
+// A=CARGO, B=IN TERMINAL, C=IN CARRIER NAME, D=OUT CARRIER NAME, 
+// E=GW(Kg), F=CONTAINER SIZE, G=CONTAINER TYPE, H=CONTAINER STATUS,
+// I=BLOK, J=SLOT, K=ROW, L=TIER, M=CLASS, N=POD, O=OPR, P=F/M, Q=Comm., R=GW(Kg)
+//
+// =====================================================================================
+
+// =====================================================================================
+//  HELPER: FUNGSI UNTUK MENENTUKAN KATEGORI BERAT
+// =====================================================================================
+
+function getWeightCategory(gwKg) {
+  if (gwKg == null || isNaN(gwKg) || gwKg < 0) return "L";
+  const gwTon = gwKg / 1000;
+  if (gwTon < 10) return "L";
+  if (gwTon < 18) return "M";
+  if (gwTon < 24) return "H";
+  return "XH";
+}
+
+// =====================================================================================
+//  GENERATE MONITORING TABLE HORIZONTAL (FINAL - HYBRID!)
+// =====================================================================================
+
+function generateMonitoringTableHorizontal(sheetName, maintenanceSheetName, blockName, slotCount, rowCount, tierCount, cellStart, reverseRow = false) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) throw new Error(`Sheet '${sheetName}' tidak ditemukan`);
+  const range = sheet.getRange(cellStart);
+  const startRow = range.getRow();
+  var startCol = range.getColumn();
+
+  // === Tabel Informasi ===
+  const designategTier = sheet.getRange(startRow + 1, startCol + 1).getA1Notation();
+  const designategTierCol = designategTier.replace(/[0-9]/g, '');
+  const designategSlot = sheet.getRange(startRow + 2, startCol + 1).getA1Notation();
+  const designategSlotCol = designategSlot.replace(/[0-9]/g, '');
+  const designategRow = sheet.getRange(startRow + 3, startCol + 1).getA1Notation();
+  const designatedRowCol = designategRow.replace(/[0-9]/g, '');
+
+  sheet.getRange(startRow, startCol).setValue("Informasi").setFontWeight("bold");
+  sheet.getRange(startRow, startCol, 1, 2).mergeAcross();
+
+  sheet.getRange(startRow + 1, startCol).setValue("Tier").setFontWeight("bold");
+  sheet.getRange(startRow + 1, startCol + 1).setValue(tierCount);
+
+  sheet.getRange(startRow + 2, startCol).setValue("Slot").setFontWeight("bold");
+  sheet.getRange(startRow + 2, startCol + 1).setValue(slotCount);
+
+  sheet.getRange(startRow + 3, startCol).setValue("Row").setFontWeight("bold");
+  sheet.getRange(startRow + 3, startCol + 1).setValue(rowCount);
+
+  sheet.getRange(startRow + 4, startCol).setValue("Capacity").setFontWeight("bold");
+  sheet.getRange(startRow + 4, startCol + 1)
+    .setFormula(`=${designategRow}*${designategTier}*${designategSlot}`);
+
+  sheet.getRange(startRow + 5, startCol).setValue("Broken").setFontWeight("bold");
+  sheet.getRange(startRow + 5, startCol + 1)
+    .setFormula(`=IFERROR('${maintenanceSheetName}'!${sheet.getRange(startRow + 5, startCol + 1).getA1Notation()},0)`);
+
+  sheet.getRange(startRow + 6, startCol).setValue("Effective").setFontWeight("bold");
+  sheet.getRange(startRow + 6, startCol + 1)
+    .setFormula(
+      `=${sheet.getRange(startRow + 4, startCol + 1).getA1Notation()}-${sheet.getRange(startRow + 5, startCol + 1).getA1Notation()}`
+    );
+
+  // === BLOCK HEADER ===
+  startCol = startCol + 3;
+  sheet.getRange(startRow, startCol).setValue("Blok").setFontWeight("bold");
+  sheet.getRange(startRow, startCol, 2, 1).mergeVertically();
+  sheet.getRange(startRow + 2, startCol).setValue(blockName).setFontWeight("bold");
+  sheet.getRange(startRow + 2, startCol, rowCount + 2, 1).mergeVertically();
+  sheet.getRange(startRow, startCol, rowCount + 2, 1).setBackground("#00B0F0");
+
+  // === HEADER POD ===
+  sheet.getRange(startRow, startCol + 1).setValue("POD").setFontWeight("bold");
+
+  const sourceSheet = ss.getSheetByName("MONITORING KAPASITAS");
+  if (sourceSheet) {
+    const data = sourceSheet.getDataRange().getValues();
+    const headers = data[0];
+    const blockIdx = headers.indexOf("BLOK");
+    const slotIdx = headers.indexOf("SLOT");
+    const podIdx = headers.indexOf("POD");
+    const classIdx = headers.indexOf("CLASS");
+
+    for (let s = 0; s < slotCount; s++) {
+      const currentCol = startCol + 2 + s;
+      const slotValue = s + 1;
+      let podValue = "";
+      let classValue = "";
+
+      for (let i = 1; i < data.length; i++) {
+        if (data[i][blockIdx] === blockName && data[i][slotIdx] == slotValue) {
+          podValue = data[i][podIdx];
+          classValue = data[i][classIdx];
+          break;
+        }
+      }
+
+      const podCell = sheet.getRange(startRow, currentCol);
+      podCell.setFontWeight("bold").setHorizontalAlignment("center");
+
+      if (String(classValue).toUpperCase() === "IMPORT") {
+        podCell.setValue("DISCH").setBackground("#00FFFF").setFontColor("#000000");
+      } else if (String(classValue).toUpperCase() === "EXPORT") {
+        const podText = podValue ? String(podValue).toUpperCase() : "";
+        podCell.setValue(podText).setBackground("#FFFFFF");
+
+        switch (podText) {
+          case "IDJKT":
+            podCell.setFontColor("#0066FF");
+            break;
+          case "IDSUB":
+            podCell.setFontColor("#FF0000");
+            break;
+          case "IDMAK":
+            podCell.setFontColor("#FF00FF");
+            break;
+          case "IDBIK":
+            podCell.setFontColor("#C00000");
+            break;
+          case "IDMKW":
+            podCell.setFontColor("#000000");
+            break;
+          case "IDSOQ":
+            podCell.setFontColor("#C65911");
+            break;
+          case "IDAMQ":
+            podCell.setFontColor("#FF6600");
+            break;
+          default:
+            podCell.setFontColor("#000000");
+        }
+      } else {
+        podCell.setValue(podValue || "").setBackground("#FFFFFF").setFontColor("#000000");
+      }
+    }
+  }
+
+  // === HEADER Row/Slot ===
+  sheet.getRange(startRow + 1, startCol + 1).setValue("Row/Slot").setFontWeight("bold");
+  for (let s = 0; s < slotCount; s++) {
+    sheet.getRange(startRow + 1, startCol + 2 + s)
+      .setValue((s + 1).toString())
+      .setFontWeight("bold")
+      .setHorizontalAlignment("center");
+  }
+
+  // === ROW x SLOT CELLS ===
+  if (reverseRow) {
+    Logger.log(`  ℹ️ Block ${blockName}: Row numbering REVERSED (${rowCount} → 1)`);
+  }
+
+  for (let r = 0; r < rowCount; r++) {
+    const currentRow = startRow + 2 + r;
+    const displayRowNumber = reverseRow ? (rowCount - r) : (r + 1);
+    
+    sheet.getRange(currentRow, startCol + 1)
+      .setValue(displayRowNumber.toString())
+      .setFontWeight("bold");
+
+    for (let s = 0; s < slotCount; s++) {
+      const currentCol = startCol + 2 + s;
+      const targetRowValue = displayRowNumber;
+      const targetSlotValue = s + 1;
+
+      const formula = `
+      =LET(
+        rows, 'MONITORING KAPASITAS'!$K$2:$K,
+        slots, 'MONITORING KAPASITAS'!$J$2:$J,
+        blocks, 'MONITORING KAPASITAS'!$I$2:$I,
+        contSize, 'MONITORING KAPASITAS'!$F$2:$F,
+    
+        targetRow, ${targetRowValue},
+        targetSlot, ${targetSlotValue},
+        targetBlock, "${blockName}",
+    
+        prevSlot, targetSlot - 1,
+        nextSlot, targetSlot + 1,
+    
+        fourtyFooterPrev, COUNTIFS(rows, targetRow, slots, prevSlot, blocks, targetBlock, contSize, 40)>0,
+        fourtyFooterNext, COUNTIFS(rows, targetRow, slots, nextSlot, blocks, targetBlock, contSize, 40)>0,
+    
+        trueCount, COUNTIFS(rows, targetRow, slots, targetSlot, blocks, targetBlock),
+        trueCountPrev, COUNTIFS(rows, targetRow, slots, prevSlot, blocks, targetBlock),
+        trueCountNext, COUNTIFS(rows, targetRow, slots, nextSlot, blocks, targetBlock),
+
+        isSlotUnusable,
+          '${maintenanceSheetName}'!${sheet.getRange(currentRow, currentCol).getA1Notation()}=$${designategTierCol}$${startRow + 1},
+
+        IF(
+          isSlotUnusable, "XX",
+          IF(
+            AND(trueCountPrev=0, fourtyFooterNext), "X",
+            IF(
+              AND(trueCountNext=0, fourtyFooterPrev, trueCount=0),
+              0,
+              trueCount
+            )
+          )
+        )
+      )
+      `;
+      sheet.getRange(currentRow, currentCol).setFormula(formula.trim());
+    }
+  }
+
+  // === FOOTERS ===
+  const usedRow = startRow + 2 + rowCount;
+  const remainingRow = usedRow + 1;
+
+  sheet.getRange(usedRow, startCol + 1).setValue("Terpakai").setFontWeight("bold");
+  sheet.getRange(remainingRow, startCol + 1).setValue("Sisa").setFontWeight("bold");
+
+  for (let s = 0; s < slotCount; s++) {
+    const col = startCol + 2 + s;
+    const colLetter = sheet.getRange(1, col).getA1Notation().replace(/[0-9]/g, '');
+    const dataStart = startRow + 2;
+    const dataEnd = startRow + 1 + rowCount;
+    const slotValue = s + 1;
+
+    sheet.getRange(usedRow, col).setFormula(
+      `=COUNTIFS('MONITORING KAPASITAS'!$I$2:$I,"${blockName}",'MONITORING KAPASITAS'!$J$2:$J,${slotValue})`
+    ).setFontWeight("bold");
+
+    const capacityPerSlot = `($${designatedRowCol}$${startRow + 3}*$${designategTierCol}$${startRow + 1})`;
+    const usedCell = sheet.getRange(usedRow, col).getA1Notation();
+    const brokenSum = `IFERROR(SUM('${maintenanceSheetName}'!${colLetter}${dataStart}:${colLetter}${dataEnd}),0)`;
+    const countX = `COUNTIF(${colLetter}${dataStart}:${colLetter}${dataEnd},"X")`;
+    
+    sheet.getRange(remainingRow, col).setFormula(`
+      =${capacityPerSlot}-${usedCell}-${brokenSum}-${countX}*$${designategTierCol}$${startRow + 1}
+    `.trim()).setFontWeight("bold");
+  }
+
+  // === RIGHTMOST COLUMN: SUM ===
+  const sumCol = startCol + 2 + slotCount;
+  sheet.getRange(startRow + 1, sumCol).setValue("Sum").setFontWeight("bold");
+  
+  for (let r = 0; r < rowCount; r++) {
+    const rowNum = startRow + 2 + r;
+    const displayRowNumber = reverseRow ? (rowCount - r) : (r + 1);
+    
+    sheet.getRange(rowNum, sumCol).setFormula(
+      `=COUNTIFS('MONITORING KAPASITAS'!$I$2:$I,"${blockName}",'MONITORING KAPASITAS'!$K$2:$K,${displayRowNumber})`
+    ).setFontWeight("bold");
+  }
+  
+  sheet.getRange(usedRow, sumCol).setFormula(
+    `=COUNTIF('MONITORING KAPASITAS'!$I$2:$I,"${blockName}")`
+  ).setFontWeight("bold");
+  
+  const sisaStartCol = startCol + 2;
+  const sisaEndCol = startCol + 1 + slotCount;
+  const sisaStartNotation = sheet.getRange(remainingRow, sisaStartCol).getA1Notation();
+  const sisaEndNotation = sheet.getRange(remainingRow, sisaEndCol).getA1Notation();
+  
+  sheet.getRange(remainingRow, sumCol).setFormula(
+    `=SUM(${sisaStartNotation}:${sisaEndNotation})`
+  ).setFontWeight("bold");
+
+  sheet.getRange(startRow, startCol, rowCount + 4, slotCount + 3)
+    .setBorder(true, true, true, true, true, true, "black", SpreadsheetApp.BorderStyle.SOLID);
+
+  // =====================================================================================
+  //  HYBRID APPROACH: Keep "XX" & "X" as formula, overwrite numbers with weight
+  // =====================================================================================
+  try {
+    const sourceSheet2 = ss.getSheetByName("MONITORING KAPASITAS");
+    if (sourceSheet2) {
+      const srcRange = sourceSheet2.getDataRange();
+      const srcVals = srcRange.getValues();
+
+      const BLOK_I = 8, SLOT_I = 9, ROW_I = 10, CLASS_I = 12, POD_I = 13, OPR_I = 14;
+      const FM_I = 15, COMM_I = 16, GW_I = 17;
+
+      const lookup = {};
+      for (let i = 1; i < srcVals.length; i++) {
+        const blokSrc = srcVals[i][BLOK_I];
+        const slotSrc = srcVals[i][SLOT_I];
+        const rowSrc = srcVals[i][ROW_I];
+        if (blokSrc == null || slotSrc == null || rowSrc == null) continue;
+        const key = `${String(blokSrc).trim()}|${String(slotSrc).trim()}|${String(rowSrc).trim()}`;
+
+        const classVal = srcVals[i][CLASS_I] ? String(srcVals[i][CLASS_I]).toUpperCase().trim() : "";
+        const podVal = srcVals[i][POD_I] ? String(srcVals[i][POD_I]).toUpperCase().trim() : "";
+        const oprVal = srcVals[i][OPR_I] ? String(srcVals[i][OPR_I]).toUpperCase().trim() : "";
+        const gwKg = srcVals[i][GW_I] ? Number(srcVals[i][GW_I]) : 0;
+        const fmVal = srcVals[i][FM_I] ? String(srcVals[i][FM_I]).toUpperCase().trim() : "";
+        const commVal = srcVals[i][COMM_I] ? String(srcVals[i][COMM_I]).toUpperCase().trim() : "";
+
+        const isMTY = (fmVal === "EMPTY" || commVal === "MT");
+        const weightCategory = isMTY ? "MTY" : getWeightCategory(gwKg);
+
+        lookup[key] = { classVal, podVal, oprVal, weightCategory, isMTY };
+      }
+
+      const slotHeaders = sheet.getRange(startRow + 1, startCol + 2, 1, slotCount).getValues()[0];
+      const rowHeaders = sheet.getRange(startRow + 2, startCol + 1, rowCount, 1).getValues().map(r => r[0]);
+
+      const targetRange = sheet.getRange(startRow + 2, startCol + 2, rowCount, slotCount);
+      const targetVals = targetRange.getValues();
+
+      const oprBgMap = {
+        "SPL": "#92D050",
+        "TNT": "#0099FF",
+        "TMS": "#F4B084"
+      };
+
+      const podFontMap = {
+        "IDJKT": "#0066FF",
+        "IDSUB": "#FF0000",
+        "IDMAK": "#FF00FF",
+        "IDBIK": "#C00000",
+        "IDMKW": "#000000",
+        "IDSOQ": "#C65911",
+        "IDAMQ": "#FF6600"
+      };
+
+      // ⭐ PROCESS EACH CELL INDIVIDUALLY
+      for (let r = 0; r < rowCount; r++) {
+        for (let s = 0; s < slotCount; s++) {
+          const cellValue = targetVals[r][s];
+          const cell = sheet.getRange(startRow + 2 + r, startCol + 2 + s);
+          
+          // ⭐ CASE 1: "XX" - Keep formula, set red background
+          if (cellValue === "XX") {
+            cell.setBackground("#FF0000").setFontColor("#FFFFFF");
+            cell.setWrap(false).setVerticalAlignment("middle").setHorizontalAlignment("center");
+            cell.setFontWeight("bold").setFontSize(10);
+            continue;
+          }
+          
+          // ⭐ CASE 2: "X" - Keep formula, set neighbor color
+          if (cellValue === "X") {
+            let neighborBg = "#D3D3D3";
+            let neighborFont = "#000000";
+            
+            const blok = String(blockName).trim();
+            const currentRowVal = String(rowHeaders[r] != null ? rowHeaders[r] : "").trim();
+            
+            if (s + 1 < slotCount) {
+              const nextSlotVal = String(slotHeaders[s + 1] != null ? slotHeaders[s + 1] : "").trim();
+              const nextKey = `${blok}|${nextSlotVal}|${currentRowVal}`;
+              if (lookup[nextKey]) {
+                const nextInfo = lookup[nextKey];
+                if (nextInfo.classVal === "IMPORT") {
+                  neighborBg = "#00FFFF";
+                  neighborFont = "#000000";
+                } else if (nextInfo.classVal === "EXPORT") {
+                  neighborBg = oprBgMap[nextInfo.oprVal] || "#FFFFFF";
+                  neighborFont = podFontMap[nextInfo.podVal] || "#000000";
+                }
+              }
+            }
+            
+            if (neighborBg === "#D3D3D3" && s - 1 >= 0) {
+              const prevSlotVal = String(slotHeaders[s - 1] != null ? slotHeaders[s - 1] : "").trim();
+              const prevKey = `${blok}|${prevSlotVal}|${currentRowVal}`;
+              if (lookup[prevKey]) {
+                const prevInfo = lookup[prevKey];
+                if (prevInfo.classVal === "IMPORT") {
+                  neighborBg = "#00FFFF";
+                  neighborFont = "#000000";
+                } else if (prevInfo.classVal === "EXPORT") {
+                  neighborBg = oprBgMap[prevInfo.oprVal] || "#FFFFFF";
+                  neighborFont = podFontMap[prevInfo.podVal] || "#000000";
+                }
+              }
+            }
+            
+            cell.setBackground(neighborBg).setFontColor(neighborFont);
+            cell.setWrap(false).setVerticalAlignment("middle").setHorizontalAlignment("center");
+            cell.setFontWeight("bold").setFontSize(10);
+            continue;
+          }
+          
+          // ⭐ CASE 3: Empty, 0, ### - Just set white
+          if (cellValue === "###" || cellValue === "" || cellValue === 0 || cellValue === "0") {
+            cell.setBackground("#FFFFFF").setFontColor("#000000");
+            cell.setWrap(false).setVerticalAlignment("middle").setHorizontalAlignment("center");
+            cell.setFontWeight("bold").setFontSize(10);
+            continue;
+          }
+          
+          // ⭐ CASE 4: NUMBER - Overwrite with weight category
+          const blok = String(blockName).trim();
+          const slotVal = String(slotHeaders[s] != null ? slotHeaders[s] : "").trim();
+          const rowVal = String(rowHeaders[r] != null ? rowHeaders[r] : "").trim();
+          const key = `${blok}|${slotVal}|${rowVal}`;
+
+          if (lookup[key]) {
+            const info = lookup[key];
+            let displayValue = String(cellValue);
+            let bgColor = "#FFFFFF";
+            let fontColor = "#000000";
+            
+            if (info.classVal === "IMPORT") {
+              bgColor = "#00FFFF";
+              fontColor = "#000000";
+              
+            } else if (info.classVal === "EXPORT") {
+              if (!info.isMTY) {
+                const weightDisplay = info.weightCategory || "L";
+                displayValue = weightDisplay + cellValue;
+              }
+              bgColor = oprBgMap[info.oprVal] || "#FFFFFF";
+              fontColor = podFontMap[info.podVal] || "#000000";
+            }
+            
+            cell.setValue(displayValue);
+            cell.setBackground(bgColor).setFontColor(fontColor);
+            cell.setWrap(false).setVerticalAlignment("middle").setHorizontalAlignment("center");
+            cell.setFontWeight("bold").setFontSize(10);
+          }
+        }
+      }
+      
+      Logger.log("✓ Hybrid display: XX preserved, numbers show weight!");
+    }
+  } catch (err) {
+    Logger.log("Error apply warna: " + err.message);
+  }
+
+  // === Tabel Informasi (lanjutan) ===
+  startCol = startCol - 3;
+
+  sheet.getRange(startRow + 7, startCol).setValue("Box").setFontWeight("bold");
+  sheet.getRange(startRow + 7, startCol + 1)
+    .setFormula(`=${sheet.getRange(usedRow, sumCol).getA1Notation()}`);
+
+  sheet.getRange(startRow + 8, startCol).setValue("TEUs").setFontWeight("bold");
+  sheet.getRange(startRow + 8, startCol + 1).setFormula(`
+  =${sheet.getRange(usedRow, sumCol).getA1Notation()}+
+  COUNTIFS('MONITORING KAPASITAS'!$I$2:$I,"${blockName}",'MONITORING KAPASITAS'!$F$2:$F,40)
+  `.trim());
+
+  sheet.getRange(startRow + 9, startCol).setValue("YOR").setFontWeight("bold");
+  sheet.getRange(startRow + 9, startCol + 1)
+    .setFormula(`=IFERROR(${sheet.getRange(startRow + 8, startCol + 1).getA1Notation()}/${sheet.getRange(startRow + 6, startCol + 1).getA1Notation()}, 0)`)
+    .setNumberFormat("0.00%");
+
+  sheet.getRange(startRow, startCol, 10, 2)
+    .setBorder(true, true, true, true, true, true, "black", SpreadsheetApp.BorderStyle.SOLID)
+    .setBackground("#a6c9ec");
+
+  // === Charting Gauge ===
+  startCol = startCol + 3;
+  const chartAnchorCell = sheet.getRange(startRow, startCol + slotCount + 3);
+  const chartRange = sheet.getRange(startRow + 9, startCol - 3, 1, 2);
+
+  const chart = sheet.newChart()
+    .setChartType(Charts.ChartType.GAUGE)
+    .addRange(chartRange)
+    .setPosition(chartAnchorCell.getRow(), chartAnchorCell.getColumn(), 0, 0)
+    .setOption("min", 0)
+    .setOption("max", 1)
+    .setOption("greenFrom", 0)
+    .setOption("greenTo", 0.33)
+    .setOption("yellowFrom", 0.33)
+    .setOption("yellowTo", 0.66)
+    .setOption("redFrom", 0.66)
+    .setOption("redTo", 1)
+    .setOption("width", 200)
+    .setOption("height", 200)
+    .build();
+
+  sheet.insertChart(chart);
+  
+  Logger.log(`✅ ${blockName} HORIZONTAL PERFECT! XX reactive + Weight displayed!`);
+}
+
+
+// =====================================================================================
+//  GENERATE MAINTENANCE TABLE HORIZONTAL
+// =====================================================================================
+
+function generateMaintenanceBlockHorizontal(maintenanceSheetName, blockName, slotCount, rowCount, tierCount, cellStart, reverseRow = false) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(maintenanceSheetName);
+  if (!sheet) throw new Error(`Sheet '${maintenanceSheetName}' tidak ditemukan`);
+  
+  const range = sheet.getRange(cellStart);
+  const startRow = range.getRow();
+  var startCol = range.getColumn();
+
+  sheet.getRange(startRow, startCol).setValue("Informasi").setFontWeight("bold");
+  sheet.getRange(startRow, startCol, 1, 2).mergeAcross();
+
+  sheet.getRange(startRow+1, startCol).setValue("Tier").setFontWeight("bold");
+  sheet.getRange(startRow+1, startCol+1).setValue(tierCount);
+
+  sheet.getRange(startRow+2, startCol).setValue("Slot").setFontWeight("bold");
+  sheet.getRange(startRow+2, startCol+1).setValue(slotCount);
+
+  sheet.getRange(startRow+3, startCol).setValue("Row").setFontWeight("bold");
+  sheet.getRange(startRow+3, startCol+1).setValue(rowCount);
+
+  startCol = startCol+3;
+  sheet.getRange(startRow, startCol).setValue("Blok").setFontWeight("bold");
+  sheet.getRange(startRow, startCol, 2, 1).mergeVertically();
+  sheet.getRange(startRow+2, startCol).setValue(blockName).setFontWeight("bold");
+  sheet.getRange(startRow+2, startCol, rowCount+1, 1).mergeVertically();
+  sheet.getRange(startRow, startCol, rowCount+1, 1).setBackground("#b4a7d6");
+  sheet.getRange(startRow, startCol + 1).setValue("Tidak Bisa Dipakai").setFontWeight("bold");
+  sheet.getRange(startRow+1, startCol + 1).setValue("Row/Slot").setFontWeight("bold");
+  sheet.getRange(startRow, startCol + 1, 1, slotCount + 1).mergeAcross();
+  
+  var currentSlot = 1
+  for (let s = 0; s < slotCount; s++) {
+    sheet.getRange(startRow + 1, startCol + 2 + s).setValue((currentSlot).toString()).setFontWeight("bold");
+    currentSlot = currentSlot+1;
+  }
+
+  if (reverseRow) {
+    Logger.log(`  ℹ️ Maintenance ${blockName}: Row numbering REVERSED (${rowCount} → 1)`);
+  }
+
+  for (let r = 0; r < rowCount; r++) {
+    const row = startRow + 2 + r;
+    const displayRowNumber = reverseRow ? (rowCount - r) : (r + 1);
+    
+    sheet.getRange(row, startCol + 1)
+      .setValue(displayRowNumber.toString())
+      .setFontWeight("bold");
+
+    const dataRange = sheet.getRange(row, startCol + 2, 1, slotCount);
+    const rule = SpreadsheetApp.newDataValidation()
+      .requireValueInList(Array.from({length: tierCount}, (_, i) => (i + 1).toString()))
+      .setAllowInvalid(false)
+      .build();
+    dataRange.setDataValidation(rule).setBackground(null);
+  }
+
+  const unusableRow = startRow + 2 + rowCount;
+  sheet.getRange(unusableRow, startCol + 1).setValue("Tidak bisa digunakan").setFontWeight("bold");
+
+  for (let s = 0; s < slotCount; s++) {
+    const col = startCol + 2 + s;
+    const colLetter = sheet.getRange(1, startCol + 2 + s).getA1Notation().replace(/[0-9]/g, '');
+    const dataStart = startRow + 2;
+    const dataEnd = startRow + 1 + rowCount;
+
+    sheet.getRange(unusableRow, col).setFormula(`=SUM(IFERROR(${colLetter}${dataStart}:${colLetter}${dataEnd},0))`).setFontWeight("bold");
+  }
+
+  const sumCol = startCol + 2 + slotCount;
+  const colLetterStart = sheet.getRange(1, startCol + 2).getA1Notation().replace(/[0-9]/g, '');
+  const colLetterEnd = sheet.getRange(1, sumCol-1).getA1Notation().replace(/[0-9]/g, ''); 
+
+  sheet.getRange(startRow, sumCol).setValue("Sum").setFontWeight("bold");
+  sheet.getRange(startRow, sumCol, rowCount+2, 1).mergeVertically();
+  sheet.getRange(startRow+rowCount+2, sumCol).setFormula(`=SUM(${colLetterStart}${unusableRow}:${colLetterEnd}${unusableRow})`).setFontWeight("bold");
+
+  sheet.getRange(startRow, startCol, rowCount+3, slotCount+3).setBorder(true, true, true, true, true, true, "black", SpreadsheetApp.BorderStyle.SOLID);
+
+  startCol = startCol-3;
+
+  sheet.getRange(startRow+4, startCol).setValue("Capacity").setFontWeight("bold");
+  sheet.getRange(startRow+4, startCol+1).setFormula(
+    `=${sheet.getRange(startRow+1, startCol+1).getA1Notation()}*${sheet.getRange(startRow+2, startCol+1).getA1Notation()}*${sheet.getRange(startRow+3, startCol+1).getA1Notation()}`
+  );
+
+  sheet.getRange(startRow+5, startCol).setValue("Broken").setFontWeight("bold");
+  sheet.getRange(startRow+5, startCol+1).setFormula(`=${sheet.getRange(startRow+rowCount+2, sumCol).getA1Notation()}`);
+  
+  sheet.getRange(startRow+6, startCol).setValue("Effective").setFontWeight("bold");
+  sheet.getRange(startRow+6, startCol+1).setFormula(`=${sheet.getRange(startRow+4, startCol+1).getA1Notation()}-${sheet.getRange(startRow+5, startCol+1).getA1Notation()}`);
+
+  sheet.getRange(startRow, startCol, 7, 2).setBorder(true, true, true, true, true, true, "black", SpreadsheetApp.BorderStyle.SOLID);
+  sheet.getRange(startRow, startCol, 7, 2).setBackground("#a6c9ec");
+}
