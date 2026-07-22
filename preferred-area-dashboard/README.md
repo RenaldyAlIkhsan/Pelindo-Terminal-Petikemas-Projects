@@ -1,6 +1,6 @@
 ## Dashboard Preview
 
-![Preferred Area Dashboard](screenshots/dashboard-overview.png)
+![Preferred Area Dashboard]
 
 ## Live Demo (View Only)
 
