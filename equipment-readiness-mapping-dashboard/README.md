@@ -1,6 +1,6 @@
 # Equipment Readiness Mapping Dashboard
 
-Dashboard interaktif untuk memantau kesiapan alat (Shore Crane, Yard Crane, dan Internal Transfer Vehicle) di seluruh terminal Pelindo Terminal Petikemas (TPK) secara real-time, terpusat, dan otomatis — menggantikan proses pemantauan manual berbasis laporan harian.
+Dashboard interaktif untuk memantau kesiapan alat (Shore Crane, Yard Crane, dan Internal Transfer Vehicle) di seluruh terminal Pelindo Terminal Petikemas (TPK) secara cepat, terpusat, dan terstruktur — menggantikan proses pemantauan manual berbasis laporan harian.
 
 🔗 **Live Dashboard:** [Equipment Readiness Mapping](https://datastudio.google.com/reporting/8e481f29-61ce-4e2a-88bc-0fc7b9632665)
 
