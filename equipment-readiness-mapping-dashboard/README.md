@@ -53,10 +53,5 @@ Dashboard ini dibangun untuk mengatasi hal tersebut dengan alur otomatis:
 - Google Sheets (staging data: upload & update)
 - Google Looker Studio (visualisasi dashboard)
 - Aplikasi scraping internal (Python/desktop app — Tim Magang Divisi PPO)
-
-## Dokumentasi
-
-Panduan lengkap penggunaan dashboard (navigasi, filter, rumus rasio, dan langkah update data) tersedia di [`Guidebook_Mapping_Kesiapan_Alat.pdf`](./Guidebook_Mapping_Kesiapan_Alat.pdf).
-
 ---
 *Project ini dikembangkan sebagai bagian dari magang di PT Pelindo Terminal Petikemas (Divisi PPO).*
